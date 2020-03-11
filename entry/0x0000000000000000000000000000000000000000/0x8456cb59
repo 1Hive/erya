@@ -1,0 +1,8 @@
+{
+  "params": [{
+    "type": "uint256",
+    "name": "foo"
+  }],
+  "en": "Pause the contract.",
+  "da": "Sæt kontrakten på pause."
+}

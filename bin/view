@@ -1,0 +1,54 @@
+#!/usr/bin/env node
+const fs = require('fs')
+const path = require('path')
+
+// Parse arguments
+const args = process.argv.slice(2)
+if (args.length > 2 || args.length < 1) {
+  console.error(`Wrong number of arguments, expected 1 to 2 got ${args.length}`)
+  process.exit(1)
+}
+
+let scope = ''
+let signature = args.pop()
+if (args.length) {
+  scope = args.pop()
+}
+
+// Find matching entries
+const entries = getFiles(
+  path.resolve(__dirname, '..', 'entry', scope)
+).filter((entry) => entry.split('/').pop() === signature)
+if (entries.length === 0) {
+  console.error(`No entry found.`)
+  process.exit(1)
+}
+
+// Display entries
+entries.forEach(displayEntry)
+
+// Utility to display entry
+function displayEntry (entryPath) {
+  const segments = entryPath.split('/')
+  const entry = JSON.parse(
+    fs.readFileSync(entryPath, { encoding: 'utf8' })
+  )
+
+  const signature = segments.pop()
+  const scope = segments.pop()
+
+  console.log(`${scope}/${signature}:`)
+  console.log(entry)
+  console.log()
+}
+
+// Get files in a directory recursively
+function getFiles (dir) {
+  return fs.readdirSync(dir)
+    .reduce((files, file) =>
+      fs.statSync(path.join(dir, file)).isDirectory()
+        ? files.concat(getFiles(path.join(dir, file)))
+        : files.concat(path.join(dir, file)),
+      []
+    )
+}

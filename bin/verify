@@ -1,0 +1,80 @@
+#!/usr/bin/env node
+const fs = require('fs')
+const path = require('path')
+const { toChecksumAddress } = require('ethereum-checksum-address')
+const ISO6391 = require('iso-639-1')
+
+// Parse arguments
+const args = process.argv.slice(2)
+if (args.length !== 1) {
+  console.error(`Wrong number of arguments, expected 1 got ${args.length}`)
+  process.exit(1)
+}
+
+const root = path.resolve(__dirname, '..')
+const entryPath = path.relative(root, args.pop())
+
+// Ensure path exists
+if (!fs.existsSync(entryPath)) {
+  console.error(`Provided entry path does not exist.`)
+  process.exit(1)
+}
+
+// Verify path structure
+const segments = entryPath.split('/')
+if (segments.length !== 3) {
+  console.error(`Expected path to have 3 segments relative to registry root, got ${segments.length}`)
+  process.exit(1)
+}
+
+const [_, scope, signature] = segments
+
+// Verify that scope is a checksummed address
+if (toChecksumAddress(scope) !== scope) {
+  console.error(`${scope}/${signature}: Entry scope must be a checksummed address.`)
+  process.exit(1)
+}
+
+// Verify that entry is a 4bytes signature
+if (!signature.startsWith('0x') || signature.length !== 10) {
+  console.error(`${scope}/${signature}: Entry file name must be a 4bytes signature prefixed by 0x, got ${signature}`)
+  process.exit(1)
+}
+
+// Verify that the entry contains the correct properties
+let entry
+try {
+  entry = fs.readFileSync(entryPath, { encoding: 'utf8' })
+  entry = JSON.parse(entry)
+} catch (_) {
+  console.error(`${scope}/${signature}: Entry is not valid JSON.`)
+  process.exit(1)
+}
+
+// Check that the `params` property exists
+if (!Array.isArray(entry.params)) {
+  console.error(`${scope}/${signature}: A property named "params" must be present and of type "Array".`)
+  process.exit(1)
+}
+
+// Check values of `params`
+const paramsIntegrity = entry.params.every(
+  (param) => param.type && param.name
+)
+if (!paramsIntegrity) {
+  console.error(`${scope}/${signature}: Every value of the "params" property must be an object with a "type" and "name" property.`)
+  process.exit(1)
+}
+
+// Verify locales
+const locales = Object.keys(entry)
+  .filter((key) => key !== 'params')
+const localesIntegrity = locales.every(
+  (locale) => ISO6391.validate(locale)
+)
+if (!localesIntegrity) {
+  console.error(`${scope}/${signature}: Locale keys must be an ISO-639-1 identifier.`)
+  process.exit(1)
+}
+
+console.log(`${scope}/${signature}: OK`)

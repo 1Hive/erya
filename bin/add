@@ -1,0 +1,110 @@
+#!/usr/bin/env node
+const fs = require('fs')
+const path = require('path')
+const prompts = require('prompts')
+const { toChecksumAddress } = require('ethereum-checksum-address')
+const ISO6391 = require('iso-639-1')
+
+function isChecksumAddress (val) {
+  try {
+    return toChecksumAddress(val) === val
+  } catch (_) {
+    return false
+  }
+}
+
+;(async () => {
+  const response = await prompts([{
+    type: 'text',
+    name: 'scope',
+    message: 'Entry scope',
+    validate: (value) => !isChecksumAddress(value)
+      ? 'Entry scope must be a checksummed address'
+      : true
+  }, {
+    type: 'text',
+    name: 'signature',
+    message: 'Method signature',
+    validate: (value) => !value.startsWith('0x') || value.length !== 10
+      ? 'Must be a 4 bytes signature prefixed with 0x'
+      : true
+  }, {
+    type: 'confirm',
+    name: 'parameters',
+    message: 'Specify method parameters?',
+    initial: true
+  }])
+
+  const parameters = []
+  let moreParameters = response.parameters
+  while (moreParameters) {
+    const answers = await prompts([{
+      type: 'text',
+      name: 'type',
+      message: 'Parameter type'
+    }, {
+      type: 'text',
+      name: 'name',
+      message: 'Parameter name',
+      initial: false
+    }, {
+      type: 'confirm',
+      name: 'more',
+      message: 'Specify additional parameters?',
+      initial: true
+    }])
+
+    parameters.push({
+      type: answers.type,
+      name: answers.name
+    })
+    moreParameters = answers.more
+  }
+
+  let locales = {}
+  let locale = 'en'
+  let moreLocales = true
+  while (moreLocales) {
+    const answers = await prompts([{
+      type: 'text',
+      name: 'description',
+      message: `Radspec description (${locale})`
+    }, {
+      type: 'confirm',
+      name: 'more',
+      message: 'Submit more localized descriptions?',
+      initial: false
+    }, {
+      type: (prev) => prev ? 'autocomplete' : null,
+      name: 'locale',
+      message: 'Select locale for next description',
+      choices: ISO6391.getAllCodes().map(
+        (code) => ({ title: ISO6391.getName(code), value: code })
+      )
+    }])
+
+    locales[locale] = answers.description
+
+    moreLocales = answers.more
+    locale = answers.locale
+  }
+
+  const entry = {
+    params: parameters,
+    ...locales
+  }
+
+  fs.mkdirSync(
+    path.resolve(__dirname, '..', 'entry', response.scope),
+    { recursive: true }
+  )
+  fs.writeFileSync(
+    path.resolve(__dirname, '..', 'entry', response.scope, response.signature),
+    JSON.stringify(entry, null, 2),
+    { encoding: 'utf8' }
+  )
+
+  console.log('Saved entry')
+  console.log(entry)
+})()
+
